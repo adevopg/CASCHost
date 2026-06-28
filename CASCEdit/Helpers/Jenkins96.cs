@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace CASCEdit.Helpers
 {
-    class Jenkins96 : HashAlgorithm
+    public class Jenkins96 : HashAlgorithm
     {
 		// Original Implementation by TOM_RUS in CASCExplorer
 		// Original Source : https://github.com/WoW-Tools/CASCExplorer/blob/master/CascLib/Jenkins96.cs

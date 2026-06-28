@@ -25,7 +25,7 @@ namespace CASCHost
 				.ConfigureLogging(options => options.AddConsole())
 				.UseConfiguration(config)
 				.UseContentRoot(Directory.GetCurrentDirectory())
-				.UseKestrel(options => options.ConfigureEndpointDefaults(opts => opts.NoDelay = true))
+				.UseKestrel()
 				.UseStartup<Startup>()
 				.Build();
 

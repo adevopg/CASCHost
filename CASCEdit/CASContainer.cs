@@ -391,22 +391,30 @@ namespace CASCEdit
 			string cdnconfig = CDNConfig.Write();
 			string version = BuildInfo["Version"];
 
+			var cdnHosts = string.Join(" ", Settings.CDNs ?? new HashSet<string>());
+
 			// Build Info - redundant
 			BuildInfo["Build Key"] = buildconfig;
 			BuildInfo["CDN Key"] = cdnconfig;
-			BuildInfo["CDN Hosts"] = string.Join(" ", Settings.CDNs);
+			BuildInfo["CDN Hosts"] = cdnHosts;
 			BuildInfo.Write();
 
-			// CDNs file
-			CDNs["Hosts"] = string.Join(" ", Settings.CDNs);
-			CDNs.Write();
+			// CDNs file (only present when hosted configs were loaded - i.e. non-Basic)
+			if (CDNs != null)
+			{
+				CDNs["Hosts"] = cdnHosts;
+				CDNs.Write();
+			}
 
-			// Versions file
-			Versions["BuildConfig"] = buildconfig;
-			Versions["CDNConfig"] = cdnconfig;
-			Versions["VersionsName"] = version;
-			Versions["BuildId"] = version.Split('.').Last();
-			Versions.Write();
+			// Versions file (only present when hosted configs were loaded - i.e. non-Basic)
+			if (Versions != null)
+			{
+				Versions["BuildConfig"] = buildconfig;
+				Versions["CDNConfig"] = cdnconfig;
+				Versions["VersionsName"] = version;
+				Versions["BuildId"] = version.Split('.').Last();
+				Versions.Write();
+			}
 
 			// Done!
 			Logger.LogInformation("CDN Config: " + cdnconfig);

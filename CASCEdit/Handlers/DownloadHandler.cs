@@ -40,6 +40,7 @@ namespace CASCEdit.Handlers
 
 			using (var br = new BinaryReader(blte))
 			{
+				// 3.4.3 ships a version 1 download manifest only.
 				Header = new DownloadHeader()
 				{
 					Header = br.ReadBytes(2),
@@ -50,18 +51,8 @@ namespace CASCEdit.Handlers
 					NumTags = br.ReadUInt16BE(),
 				};
 
-				if (Header.Version >= 2)
-				{
-					Header.NumFlags = br.ReadByte();
-				}
-
-				if (Header.Version >= 3)
-				{
-					// TODO do we have a version 3 file to test with?
-					//Header.BasePriority = br.ReadByte();
-					//Header.Unknown_0D = br.ReadBytes(3);
-					throw new NotImplementedException("Download file versions newer than 2 are not supported.");
-				}
+				if (Header.Version != 1)
+					CASContainer.Settings?.Logger.LogAndThrow(Logging.LogType.Critical, $"Unsupported download manifest version {Header.Version} (only WoW Classic 3.4.3 / version 1 is supported).");
 
 				// entries
 				for (int i = 0; i < Header.NumEntries; i++)
@@ -76,11 +67,6 @@ namespace CASCEdit.Handlers
 					if (Header.HasChecksum != 0)
 					{
 						entry.Checksum = br.ReadUInt32BE();
-					}
-
-					if (Header.Version >= 2)
-					{
-						entry.Flags = (DownloadFlags[])(object)br.ReadBytes(Header.NumFlags);
 					}
 
 					Entries.Add(entry);
@@ -127,7 +113,6 @@ namespace CASCEdit.Handlers
 			{
 				EKey = blte.EKey,
 				FileSize = blte.CompressedSize - 30,
-				Flags = new DownloadFlags[Header.NumFlags],
 				Priority = (byte)(blte.HighPriority ? 0 : 1)
 			};
 
@@ -185,18 +170,6 @@ namespace CASCEdit.Handlers
 				bw.WriteUInt32BE((uint)Entries.Count);
 				bw.WriteUInt16BE((ushort)Tags.Count);
 
-				if (Header.Version >= 2)
-				{
-					bw.Write(Header.NumFlags);
-				}
-
-				if (Header.Version >= 3)
-				{
-					// TODO
-					//bw.Write(Header.BasePriority);
-					//bw.Write(Header.Unknown_0D);
-				}
-
 				entries[0] = ms.ToArray();
 				files[0] = new CASFile(entries[0], EncodingMap[0].Type, EncodingMap[0].CompressionLevel);
 			}
@@ -214,11 +187,6 @@ namespace CASCEdit.Handlers
 					if (Header.HasChecksum != 0)
 					{
 						bw.WriteUInt32BE(entry.Checksum);
-					}
-
-					if (Header.Version >= 2)
-					{
-						bw.Write((byte[])(object)entry.Flags);
 					}
 				}
 

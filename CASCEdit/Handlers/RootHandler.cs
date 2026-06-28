@@ -13,6 +13,10 @@ using CASCEdit.IO;
 
 namespace CASCEdit.Handlers
 {
+	// Targets the WoW Classic 3.4.3 root format only: a flat sequence of blocks, each
+	// { uint count, uint contentFlags, uint localeFlags }, then `count` int32 FileDataID deltas,
+	// then `count` interleaved [16-byte CKey + 8-byte Jenkins nameHash] records. No TSFM header,
+	// no nameless entries, no separate key/hash arrays. Other client versions are out of scope.
 	public class RootHandler : IDisposable
 	{
 		public RootChunk GlobalRoot { get; private set; }
@@ -47,7 +51,7 @@ namespace CASCEdit.Handlers
 					LocaleFlags = (LocaleFlags)stream.ReadUInt32(),
 				};
 
-				// set the global root
+				// Reuse our own catch-all block when re-reading a root CASCHost previously wrote.
 				if (chunk.LocaleFlags == LocaleFlags.All_WoW && chunk.ContentFlags == ContentFlags.None)
 					GlobalRoot = chunk;
 
@@ -76,10 +80,14 @@ namespace CASCEdit.Handlers
 				Chunks.Add(chunk);
 			}
 
+			// A stock 3.4.3 root carries no catch-all block - every block has specific content/locale
+			// flags - so on first build we synthesise one (ContentFlags.None + All_WoW) and append it.
+			// Custom files live here and the client resolves them regardless of its active locale.
 			if (GlobalRoot == null)
 			{
-				CASContainer.Logger.LogCritical($"No Global root found. Root file is corrupt.");
-				return;
+				CASContainer.Logger.LogInformation("No catch-all root block present; creating one for custom files.");
+				GlobalRoot = new RootChunk() { ContentFlags = ContentFlags.None, LocaleFlags = LocaleFlags.All_WoW };
+				Chunks.Add(GlobalRoot);
 			}
 
 			// set maxid from cache
@@ -121,7 +129,7 @@ namespace CASCEdit.Handlers
 						.Where(e => e.NameHash == namehash);
 						
 			if (entries.Count() == 0) { // New file, we need to create an entry for it
-				var cached = cache.Entries.FirstOrDefault(x => x.Path == path);
+				var cached = cache?.Entries.FirstOrDefault(x => x.Path == path);
 				var fileDataId = Math.Max(maxId + 1, minimumId);
 
 				if (cached != null) {
@@ -154,13 +162,19 @@ namespace CASCEdit.Handlers
 			{
 				root.Entries.Sort((x, y) => x.FileDataId.CompareTo(y.FileDataId));
 
-				for (int i = 1; i < root.Entries.Count; i++)
+				for (int i = 0; i < root.Entries.Count; i++)
 				{
-					var prevId = root.Entries[i - 1].FileDataId;
 					var current = root.Entries[i];
 
-					if (prevId + current.FileDataIdOffset + 1 != current.FileDataId)
-						current.FileDataIdOffset = current.FileDataId - prevId - 1;
+					// Decoder reconstructs FileDataId as (runningIndex + offset), where runningIndex
+					// starts at 0 and becomes (prevId + 1) after each entry. So the first entry's
+					// offset is its absolute id, and subsequent ones are the gap to the previous id.
+					// Index 0 must be set explicitly, else the first custom file in the catch-all
+					// block round-trips back to FileDataId 0.
+					if (i == 0)
+						current.FileDataIdOffset = current.FileDataId;
+					else
+						current.FileDataIdOffset = current.FileDataId - root.Entries[i - 1].FileDataId - 1;
 				}
 			}
 		}
@@ -176,6 +190,11 @@ namespace CASCEdit.Handlers
 				// write each chunk
 				foreach (var c in Chunks)
 				{
+					// skip empty blocks (e.g. an unused synthesised catch-all) - the client
+					// doesn't expect zero-entry blocks and they'd only bloat the file.
+					if (c.Entries.Count == 0)
+						continue;
+
 					bw.Write((uint)c.Entries.Count);
 					bw.Write((uint)c.ContentFlags);
 					bw.Write((uint)c.LocaleFlags);
